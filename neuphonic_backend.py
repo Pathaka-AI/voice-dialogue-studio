@@ -10,7 +10,6 @@ import argparse
 from pathlib import Path
 
 # Set environment variable for API key
-# API_KEY = "4e2860a0031af3527f9b6f3618b7665a360fd15fb7f165af3c877e53aaecf8ca.19edd346-a252-4167-98b4-6caecb7433c4"
 # For production, set NEUPHONIC_API_KEY environment variable
 API_KEY = os.getenv('NEUPHONIC_API_KEY', "your_api_key_here")
 if API_KEY == "your_api_key_here":
