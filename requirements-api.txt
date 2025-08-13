@@ -1,0 +1,15 @@
+# FastAPI backend requirements (in addition to existing pyneuphonic requirements)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pydantic==2.5.0
+
+# Existing requirements (for reference)
+# pyneuphonic
+# requests
+# wave (built-in)
+# asyncio (built-in)
+# pydub
+# json (built-in)
+# os (built-in)
+# pathlib (built-in) 
