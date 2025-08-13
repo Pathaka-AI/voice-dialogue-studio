@@ -5,7 +5,14 @@ from pydub import AudioSegment
 import glob
 import os
 
-API_KEY = "4e2860a0031af3527f9b6f3618b7665a360fd15fb7f165af3c877e53aaecf8ca.19edd346-a252-4167-98b4-6caecb7433c4"
+# Secure API key handling - use environment variable
+API_KEY = os.getenv('NEUPHONIC_API_KEY')
+if not API_KEY:
+    print("⚠️  Error: NEUPHONIC_API_KEY environment variable not set.")
+    print("   Please set your API key:")
+    print("   export NEUPHONIC_API_KEY='your_actual_api_key'")
+    print("   Or create a .env file with: NEUPHONIC_API_KEY=your_actual_api_key")
+    raise ValueError("Missing NEUPHONIC_API_KEY environment variable")
 
 semaphore = asyncio.Semaphore(3) # I WOULD RECOMMEND NOT EXCEEDING 3 CONCURRENT REQUESTS
 
