@@ -330,15 +330,20 @@ class NeuphonicBackend:
         
         print(f"📝 Updated voice mapping: {voice_name} -> {voice_id}")
 
-    def combine_audio_files_hq(self, audio_files, output_filename="combined_48khz.wav", sampling_rate=48000):
-        """Combine multiple high-quality audio files maintaining 48kHz sampling rate"""
+    def combine_audio_files_hq(self, audio_files, output_filename="combined_48khz.wav", sampling_rate=48000, gap_seconds=0.3):
+        """Combine multiple high-quality audio files with smooth transitions to prevent audio snaps"""
         try:
             import wave
             import os
+            import struct
             
             output_path = self.output_dir / output_filename
             
-            print(f"🔗 Combining {len(audio_files)} audio files at {sampling_rate}Hz...")
+            print(f"🔗 Combining {len(audio_files)} audio files at {sampling_rate}Hz with {gap_seconds}s gaps...")
+            
+            # Calculate gap in samples
+            gap_samples = int(sampling_rate * gap_seconds)
+            silence_data = struct.pack('<' + 'h' * gap_samples, *([0] * gap_samples))
             
             with wave.open(str(output_path), 'wb') as output_wav:
                 output_wav.setnchannels(1)  # Mono
@@ -354,21 +359,48 @@ class NeuphonicBackend:
                             if input_rate != sampling_rate:
                                 print(f"⚠️  Warning: File {file_path} has {input_rate}Hz, expected {sampling_rate}Hz")
                             
+                            # Read audio data
                             frames = input_wav.readframes(input_wav.getnframes())
+                            
+                            # Apply short fade-out to prevent clicks (last 100ms)
+                            if len(frames) >= 2:  # Ensure we have at least one sample
+                                fade_samples = min(int(sampling_rate * 0.1), len(frames) // 2)  # 100ms or half the audio
+                                if fade_samples > 0:
+                                    # Convert bytes to samples for fade processing
+                                    samples = struct.unpack('<' + 'h' * (len(frames) // 2), frames)
+                                    samples = list(samples)
+                                    
+                                    # Apply fade-out to last fade_samples
+                                    for j in range(fade_samples):
+                                        fade_factor = (fade_samples - j) / fade_samples
+                                        sample_index = len(samples) - 1 - j
+                                        if sample_index >= 0:
+                                            samples[sample_index] = int(samples[sample_index] * fade_factor)
+                                    
+                                    # Convert back to bytes
+                                    frames = struct.pack('<' + 'h' * len(samples), *samples)
+                            
+                            # Write the audio segment
                             output_wav.writeframes(frames)
+                            
+                            # Add silence gap between segments (except after the last file)
+                            if i < len(audio_files) - 1:
+                                output_wav.writeframes(silence_data)
+                                print(f"    🔇 Added {gap_seconds}s silence gap")
+                                
                     else:
                         print(f"❌ Warning: File {file_path} does not exist. Skipping.")
             
             print(f"✅ High-quality combined audio saved: {output_path}")
-            print(f"📊 Final sampling rate: {sampling_rate}Hz")
+            print(f"📊 Final sampling rate: {sampling_rate}Hz with smooth transitions")
             return str(output_path)
             
         except Exception as e:
             print(f"❌ Failed to combine audio files: {str(e)}")
             return None
 
-    def create_podcast_from_script(self, script_file, output_filename="podcast_48khz.wav", use_longform=False, speed_mapping=None, use_parallel=False):
-        """Create a complete podcast from a script file using high-quality 48kHz audio"""
+    def create_podcast_from_script(self, script_file, output_filename="podcast_48khz.wav", use_longform=False, speed_mapping=None, use_parallel=False, gap_seconds=0.3):
+        """Create a complete podcast from a script file using high-quality 48kHz audio with customizable gaps"""
         try:
             # Default speed mapping if none provided
             if speed_mapping is None:
@@ -392,16 +424,16 @@ class NeuphonicBackend:
             # Choose processing method
             if use_longform and use_parallel:
                 print(f"🎬 Creating podcast from {len(processed_script)} segments using PARALLEL LONGFORM...")
-                return self._create_podcast_parallel_longform(processed_script, voice_mapping, speed_mapping, output_filename)
+                return self._create_podcast_parallel_longform(processed_script, voice_mapping, speed_mapping, output_filename, gap_seconds)
             else:
                 print(f"🎬 Creating podcast from {len(processed_script)} segments using SEQUENTIAL processing...")
-                return self._create_podcast_sequential(processed_script, voice_mapping, speed_mapping, output_filename, use_longform)
+                return self._create_podcast_sequential(processed_script, voice_mapping, speed_mapping, output_filename, use_longform, gap_seconds)
                 
         except Exception as e:
             print(f"❌ Failed to create podcast: {str(e)}")
             return None
 
-    def _create_podcast_sequential(self, processed_script, voice_mapping, speed_mapping, output_filename, use_longform):
+    def _create_podcast_sequential(self, processed_script, voice_mapping, speed_mapping, output_filename, use_longform, gap_seconds):
         """Sequential processing (original method)"""
         audio_files = []
         
@@ -444,16 +476,16 @@ class NeuphonicBackend:
             # Use appropriate sampling rate based on generation method
             if use_longform:
                 # Longform uses 48kHz
-                final_podcast = self.combine_audio_files_hq(audio_files, output_filename, sampling_rate=48000)
+                final_podcast = self.combine_audio_files_hq(audio_files, output_filename, sampling_rate=48000, gap_seconds=gap_seconds)
             else:
                 # SSE uses 22kHz
-                final_podcast = self.combine_audio_files_hq(audio_files, output_filename, sampling_rate=22050)
+                final_podcast = self.combine_audio_files_hq(audio_files, output_filename, sampling_rate=22050, gap_seconds=gap_seconds)
             return final_podcast
         else:
             print("❌ No audio files were generated")
             return None
 
-    def _create_podcast_parallel_longform(self, processed_script, voice_mapping, speed_mapping, output_filename):
+    def _create_podcast_parallel_longform(self, processed_script, voice_mapping, speed_mapping, output_filename, gap_seconds):
         """Parallel longform processing with proper ordering"""
         from concurrent.futures import ThreadPoolExecutor
         
@@ -522,7 +554,8 @@ class NeuphonicBackend:
             final_podcast = self.combine_audio_files_hq(
                 audio_files_ordered, 
                 output_filename, 
-                sampling_rate=48000
+                sampling_rate=48000,
+                gap_seconds=gap_seconds
             )
             
             if len(audio_files_ordered) < len(tasks):

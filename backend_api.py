@@ -53,6 +53,8 @@ class DialogueGenerationRequest(BaseModel):
     voice_mapping: Dict[str, str]
     speed_mapping: Dict[str, float] = {}  # Add speed mapping with default empty dict
     use_longform: bool = False
+    use_parallel: bool = False  # Add parallel processing flag
+    gap_seconds: float = 0.3  # Gap between audio segments to prevent snaps
     sampling_rate: int = 48000
     encoding: str = "pcm_linear"
 
@@ -208,7 +210,9 @@ async def generate_dialogue(request: DialogueGenerationRequest):
                 script_file=script_file_path,
                 output_filename="dialogue_output.wav",
                 use_longform=request.use_longform,
-                speed_mapping=request.speed_mapping  # Pass speed mapping
+                speed_mapping=request.speed_mapping,  # Pass speed mapping
+                use_parallel=request.use_parallel,    # Pass parallel processing flag
+                gap_seconds=request.gap_seconds       # Pass gap duration to prevent audio snaps
             )
             
             if output_file and os.path.exists(output_file):
